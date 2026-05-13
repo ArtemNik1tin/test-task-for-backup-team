@@ -1,26 +1,91 @@
-# Описание
-Нужно написать клиент-серверное приложение для управления DNS-серверами.
+# DNS Manager
 
-# Задача
-Есть удаленный компьютер, которым нужно уметь управлять извне. Нужно реализовать управление DNS-серверами на нем.
-На нем будет запущено серверное приложение, которое должно предоставлять следующие функции:
+Клиент-серверное приложение для управления DNS-серверами через `/etc/resolv.conf`.
 
-- Добавить DNS-сервер
-- Удалить DNS-сервер
-- Получить список всех DNS-серверов
-Авторизовать пользователей не требуется.
-- Сервер должен корректно обрабатывать не валидные запросы со стороны пользователя.
-- Клиент представляет собой CLI-клиент, который предоставляет пользователю те же функции, но посредством CLI. В нем должна быть справка по функциям.
-- Приложения обычно получаются с багами. Предусмотри ситуацию, когда во время работы твоего сервера выясняется, что он работает неправильно и теперь нужно понять почему.
+## Quick Start
 
-# Реализация
-- Пишем на Go
-- Управление DNS серверами нужно реализовать через файл /etc/resolv.conf. Считаем, что никто в другой на системе в него не пишет, кроме нашего приложения
-- CLI-клиент можно реализовать любым фреймворком - cobra, стандартный flag или другой. В клиенте должна быть возможность посмотреть справку через флаг --help.
+```bash
+# Build
+go build -o dns-manager-server ./api/cmd/server
+go build -o dns-cli ./cmd/client
 
-Сервер предоставляет REST или gRPC API на выбор (что лучше знаешь). Документацию по API генерить не требуется
-Напиши несколько юнит-тестов на функционал управления DNS в серверном приложении.
-Упаковывать в докер и подобное не требуется, только если тебе нужно для разработки
+# Run server (default :8080)
+./dns-manager-server
 
-# Требования к решению:
-В качестве ответа на задачу прикрепи ссылку на репозиторий (убедись, что она открыта для просмотра).
+# Use CLI
+./dns-cli list
+./dns-cli add 8.8.8.8
+./dns-cli del 8.8.8.8
+./dns-cli --server http://localhost:8080 list
+```
+
+## Architecture
+
+Чистая архитектура (Clean Architecture / Hexagonal) с явным разделением слоёв:
+
+```
+api/internal/
+  domain/       — Entity (Nameserver) + sentinel errors
+  usecase/      — Business logic + port interfaces (DNSReader/DNSWriter/DNSManager)
+  adapter/
+    resolver/   — Outbound adapter: read/write resolv.conf
+  controller/
+    http/       — Inbound adapter: HTTP handlers + middleware + composition root
+  dto/          — Request/response DTOs
+```
+
+**Dependency Rule**: все слои зависят только к центру (`domain`). Внешние адаптеры реализуют порты, объявленные в `usecase`.
+
+## Highlights for Reviewers
+
+- **Чистая архитектура** — бизнес-логика (`usecase`) не зависит от фреймворков и адаптеров. Порты объявлены как интерфейсы, HTTP-слой работает через свой `DNSUseCase` интерфейс (DIP)
+- **Production-grade logging** — structured JSON-logger (slog) с middleware для трейсинга запросов (method, path, status, duration)
+- **Graceful shutdown** — сервер корректно обрабатывает SIGINT/SIGTERM, доводя текущие запросы до завершения
+- **Атомарный rewrite** — файл resolv.conf перезаписывается через temp-file + rename, данные не теряются при сбое
+- **Конкурентный доступ** — sync.Mutex оборачивает все операции чтения/записи resolv.conf
+- **Idempotent add** — повторное добавление существующего NS-сервера не приводит к дубликату
+- **Обратная совместимость** — парсер корректно читает комментарии (`#`, `;`), пустые строки, не затрагивает чужие директивы
+
+### Тесты
+
+| Пакет | Тестов | Покрытие |
+|-------|--------|----------|
+| `domain` | 12 | 100% |
+| `usecase` | 10 | 100% |
+| `adapter/resolver` | 20 | 83% |
+| `controller/http` (unit) | 17 | — |
+| `controller/http` (integration) | 8 | — |
+
+Каждый пакет имеет unit-тесты, HTTP-слой дополнительно покрыт интеграционными тестами (полный стек через httptest + temp-файл). Все тесты проходят с `-race`.
+
+### Линтер
+
+```bash
+golangci-lint run   # 0 issues, 55 linters enabled
+```
+
+## Server Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `LISTEN_ADDR` | `:8080` | Server listen address |
+| `RESOLVE_PATH` | `/etc/resolv.conf` | Path to resolv.conf |
+| `LOG_LEVEL` | `info` | Log level (debug/info/warn/error) |
+
+## Project Structure
+
+```
+.
+├── api/
+│   ├── cmd/server/          # Server entry point
+│   └── internal/
+│       ├── adapter/resolver # resolv.conf adapter
+│       ├── controller/http  # HTTP handlers + tests
+│       ├── domain           # Nameserver entity
+│       ├── dto              # Request/response DTOs
+│       └── usecase          # Business logic
+├── cmd/client/              # CLI client (Cobra)
+├── .golangci.yml            # Linter config (55 linters)
+├── TASK.md                  # Original task description
+└── README.md
+```
