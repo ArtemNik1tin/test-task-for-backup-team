@@ -52,7 +52,8 @@ api/internal/
 | `adapter/resolver` | 20 | 83% |
 | `controller/http` | 25 (unit + integration) | 97.2% |
 
-Каждый пакет имеет unit-тесты, HTTP-слой дополнительно покрыт интеграционными тестами (полный стек через httptest + temp-файл). Все тесты проходят с `-race`.
+Каждый пакет имеет unit-тесты, HTTP-слой дополнительно покрыт интеграционными тестами.
+Все тесты проходят с `-race`.
 
 ## Server Configuration
 
