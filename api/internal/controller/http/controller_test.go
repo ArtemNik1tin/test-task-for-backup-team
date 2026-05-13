@@ -1,3 +1,4 @@
+// Package http contains HTTP handlers and tests for the DNS Manager API.
 package http
 
 import (
@@ -35,7 +36,7 @@ func (m *mockUsecase) List(_ context.Context) ([]domain.Nameserver, error) {
 }
 
 func newTestController(mock *mockUsecase) *DNSController {
-	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	log := slog.New(slog.DiscardHandler)
 	return NewDNSController(log, mock)
 }
 
@@ -55,11 +56,16 @@ func TestAdd_Success(t *testing.T) {
 	ts := register(t, ctrl)
 	defer ts.Close()
 
-	resp, err := http.Post(ts.URL+"/api/dns", "application/json", bytes.NewReader([]byte(`{"ip":"8.8.8.8"}`)))
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, ts.URL+"/api/dns", bytes.NewReader([]byte(`{"ip":"8.8.8.8"}`)))
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusCreated {
 		t.Errorf("expected 201, got %d", resp.StatusCode)
@@ -71,11 +77,16 @@ func TestAdd_EmptyBody(t *testing.T) {
 	ts := register(t, ctrl)
 	defer ts.Close()
 
-	resp, err := http.Post(ts.URL+"/api/dns", "application/json", bytes.NewReader([]byte{}))
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, ts.URL+"/api/dns", bytes.NewReader([]byte{}))
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Errorf("expected 400, got %d", resp.StatusCode)
@@ -87,11 +98,16 @@ func TestAdd_InvalidJSON(t *testing.T) {
 	ts := register(t, ctrl)
 	defer ts.Close()
 
-	resp, err := http.Post(ts.URL+"/api/dns", "application/json", bytes.NewReader([]byte(`not json`)))
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, ts.URL+"/api/dns", bytes.NewReader([]byte(`not json`)))
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Errorf("expected 400, got %d", resp.StatusCode)
@@ -103,11 +119,16 @@ func TestAdd_EmptyIP(t *testing.T) {
 	ts := register(t, ctrl)
 	defer ts.Close()
 
-	resp, err := http.Post(ts.URL+"/api/dns", "application/json", bytes.NewReader([]byte(`{"ip":""}`)))
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, ts.URL+"/api/dns", bytes.NewReader([]byte(`{"ip":""}`)))
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Errorf("expected 400, got %d", resp.StatusCode)
@@ -119,11 +140,16 @@ func TestAdd_InvalidIPFromDomain(t *testing.T) {
 	ts := register(t, ctrl)
 	defer ts.Close()
 
-	resp, err := http.Post(ts.URL+"/api/dns", "application/json", bytes.NewReader([]byte(`{"ip":"8.8.8.8"}`)))
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, ts.URL+"/api/dns", bytes.NewReader([]byte(`{"ip":"8.8.8.8"}`)))
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Errorf("expected 400, got %d", resp.StatusCode)
@@ -135,17 +161,25 @@ func TestAdd_NotGlobalUnicast(t *testing.T) {
 	ts := register(t, ctrl)
 	defer ts.Close()
 
-	resp, err := http.Post(ts.URL+"/api/dns", "application/json", bytes.NewReader([]byte(`{"ip":"8.8.8.8"}`)))
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, ts.URL+"/api/dns", bytes.NewReader([]byte(`{"ip":"8.8.8.8"}`)))
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Errorf("expected 400, got %d", resp.StatusCode)
 	}
 
-	body, _ := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
 	var errResp dto.ErrorResponse
 	if err := json.Unmarshal(body, &errResp); err != nil {
 		t.Fatalf("decode error response: %v", err)
@@ -160,11 +194,16 @@ func TestAdd_InternalError(t *testing.T) {
 	ts := register(t, ctrl)
 	defer ts.Close()
 
-	resp, err := http.Post(ts.URL+"/api/dns", "application/json", bytes.NewReader([]byte(`{"ip":"8.8.8.8"}`)))
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, ts.URL+"/api/dns", bytes.NewReader([]byte(`{"ip":"8.8.8.8"}`)))
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusInternalServerError {
 		t.Errorf("expected 500, got %d", resp.StatusCode)
@@ -178,12 +217,15 @@ func TestDelete_Success(t *testing.T) {
 	ts := register(t, ctrl)
 	defer ts.Close()
 
-	req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/dns", bytes.NewReader([]byte(`{"ip":"8.8.8.8"}`)))
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodDelete, ts.URL+"/api/dns", bytes.NewReader([]byte(`{"ip":"8.8.8.8"}`)))
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("expected 200, got %d", resp.StatusCode)
@@ -195,12 +237,15 @@ func TestDelete_EmptyBody(t *testing.T) {
 	ts := register(t, ctrl)
 	defer ts.Close()
 
-	req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/dns", bytes.NewReader([]byte{}))
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodDelete, ts.URL+"/api/dns", bytes.NewReader([]byte{}))
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Errorf("expected 400, got %d", resp.StatusCode)
@@ -212,12 +257,15 @@ func TestDelete_InvalidJSON(t *testing.T) {
 	ts := register(t, ctrl)
 	defer ts.Close()
 
-	req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/dns", bytes.NewReader([]byte(`not json`)))
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodDelete, ts.URL+"/api/dns", bytes.NewReader([]byte(`not json`)))
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Errorf("expected 400, got %d", resp.StatusCode)
@@ -229,12 +277,15 @@ func TestDelete_DomainError(t *testing.T) {
 	ts := register(t, ctrl)
 	defer ts.Close()
 
-	req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/dns", bytes.NewReader([]byte(`{"ip":"bad"}`)))
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodDelete, ts.URL+"/api/dns", bytes.NewReader([]byte(`{"ip":"bad"}`)))
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Errorf("expected 400, got %d", resp.StatusCode)
@@ -250,17 +301,24 @@ func TestList_Success(t *testing.T) {
 	ts := register(t, ctrl)
 	defer ts.Close()
 
-	resp, err := http.Get(ts.URL + "/api/dns")
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, ts.URL+"/api/dns", nil)
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("expected 200, got %d", resp.StatusCode)
 	}
 
-	body, _ := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
 	var listResp dto.ListDNSResponse
 	if err := json.Unmarshal(body, &listResp); err != nil {
 		t.Fatalf("decode list response: %v", err)
@@ -275,17 +333,24 @@ func TestList_Empty(t *testing.T) {
 	ts := register(t, ctrl)
 	defer ts.Close()
 
-	resp, err := http.Get(ts.URL + "/api/dns")
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, ts.URL+"/api/dns", nil)
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("expected 200, got %d", resp.StatusCode)
 	}
 
-	body, _ := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
 	var listResp dto.ListDNSResponse
 	if err := json.Unmarshal(body, &listResp); err != nil {
 		t.Fatalf("decode list response: %v", err)
@@ -300,11 +365,15 @@ func TestList_InternalError(t *testing.T) {
 	ts := register(t, ctrl)
 	defer ts.Close()
 
-	resp, err := http.Get(ts.URL + "/api/dns")
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, ts.URL+"/api/dns", nil)
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusInternalServerError {
 		t.Errorf("expected 500, got %d", resp.StatusCode)
@@ -318,10 +387,21 @@ func TestAdd_ResponseBody(t *testing.T) {
 	ts := register(t, ctrl)
 	defer ts.Close()
 
-	resp, _ := http.Post(ts.URL+"/api/dns", "application/json", bytes.NewReader([]byte(`{"ip":"8.8.8.8"}`)))
-	defer resp.Body.Close()
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, ts.URL+"/api/dns", bytes.NewReader([]byte(`{"ip":"8.8.8.8"}`)))
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("http post: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
 
-	body, _ := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
 	var msg dto.MessageResponse
 	if err := json.Unmarshal(body, &msg); err != nil {
 		t.Fatalf("decode response: %v", err)
@@ -336,11 +416,20 @@ func TestDelete_ResponseBody(t *testing.T) {
 	ts := register(t, ctrl)
 	defer ts.Close()
 
-	req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/dns", bytes.NewReader([]byte(`{"ip":"8.8.8.8"}`)))
-	resp, _ := http.DefaultClient.Do(req)
-	defer resp.Body.Close()
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodDelete, ts.URL+"/api/dns", bytes.NewReader([]byte(`{"ip":"8.8.8.8"}`)))
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("http do: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
 
-	body, _ := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
 	var msg dto.MessageResponse
 	if err := json.Unmarshal(body, &msg); err != nil {
 		t.Fatalf("decode response: %v", err)

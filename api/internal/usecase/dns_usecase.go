@@ -1,3 +1,4 @@
+// Package usecase implements the business logic for DNS server management.
 package usecase
 
 import (

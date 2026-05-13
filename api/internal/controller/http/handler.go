@@ -16,7 +16,7 @@ type Config struct {
 }
 
 // NewHandler creates the HTTP handler, wiring adapters and use cases together.
-func NewHandler(ctx context.Context, log *slog.Logger, cfg Config) http.Handler {
+func NewHandler(_ context.Context, log *slog.Logger, cfg Config) http.Handler {
 	r := resolver.NewResolver(cfg.ResolvePath)
 	uc := usecase.NewDNSUseCase(r)
 	ctrl := NewDNSController(log, uc)

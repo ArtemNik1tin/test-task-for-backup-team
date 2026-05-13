@@ -21,16 +21,16 @@ func newIntegrationServer(t *testing.T, initialData ...string) *httptest.Server 
 	dir := t.TempDir()
 	path := filepath.Join(dir, "resolv.conf")
 
-	f, err := os.Create(path)
+	f, err := os.Create(path) //nolint:gosec // path is in TempDir
 	if err != nil {
 		t.Fatalf("create temp file: %v", err)
 	}
 	for _, line := range initialData {
 		_, _ = f.WriteString(line + "\n")
 	}
-	f.Close()
+	_ = f.Close()
 
-	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	log := slog.New(slog.DiscardHandler)
 	handler := NewHandler(context.Background(), log, Config{ResolvePath: path})
 	return httptest.NewServer(handler)
 }
@@ -40,23 +40,35 @@ func TestIntegration_AddAndList(t *testing.T) {
 	defer ts.Close()
 
 	// Add a DNS server.
-	resp, err := http.Post(ts.URL+"/api/dns", "application/json", bytes.NewReader([]byte(`{"ip":"8.8.8.8"}`)))
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, ts.URL+"/api/dns", bytes.NewReader([]byte(`{"ip":"8.8.8.8"}`)))
 	if err != nil {
 		t.Fatalf("add request: %v", err)
 	}
-	resp.Body.Close()
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("add request: %v", err)
+	}
+	_ = resp.Body.Close()
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("add: expected 201, got %d", resp.StatusCode)
 	}
 
 	// List and verify.
-	resp, err = http.Get(ts.URL + "/api/dns")
+	req, err = http.NewRequestWithContext(context.Background(), http.MethodGet, ts.URL+"/api/dns", nil)
+	if err != nil {
+		t.Fatalf("list new request: %v", err)
+	}
+	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("list request: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
-	body, _ := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
 	var listResp dto.ListDNSResponse
 	if err := json.Unmarshal(body, &listResp); err != nil {
 		t.Fatalf("decode list: %v", err)
@@ -71,24 +83,34 @@ func TestIntegration_DeleteAndList(t *testing.T) {
 	defer ts.Close()
 
 	// Delete one server.
-	req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/dns", bytes.NewReader([]byte(`{"ip":"8.8.8.8"}`)))
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodDelete, ts.URL+"/api/dns", bytes.NewReader([]byte(`{"ip":"8.8.8.8"}`)))
+	if err != nil {
+		t.Fatalf("delete new request: %v", err)
+	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("delete request: %v", err)
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("delete: expected 200, got %d", resp.StatusCode)
 	}
 
 	// List and verify one server remains.
-	resp, err = http.Get(ts.URL + "/api/dns")
+	req, err = http.NewRequestWithContext(context.Background(), http.MethodGet, ts.URL+"/api/dns", nil)
+	if err != nil {
+		t.Fatalf("list new request: %v", err)
+	}
+	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("list request: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
-	body, _ := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
 	var listResp dto.ListDNSResponse
 	if err := json.Unmarshal(body, &listResp); err != nil {
 		t.Fatalf("decode list: %v", err)
@@ -103,23 +125,35 @@ func TestIntegration_AddDuplicate(t *testing.T) {
 	defer ts.Close()
 
 	// Try adding duplicate.
-	resp, err := http.Post(ts.URL+"/api/dns", "application/json", bytes.NewReader([]byte(`{"ip":"8.8.8.8"}`)))
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, ts.URL+"/api/dns", bytes.NewReader([]byte(`{"ip":"8.8.8.8"}`)))
+	if err != nil {
+		t.Fatalf("add duplicate new request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("add duplicate request: %v", err)
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("add duplicate: expected 201 (idempotent), got %d", resp.StatusCode)
 	}
 
 	// Verify still only one.
-	resp, err = http.Get(ts.URL + "/api/dns")
+	req, err = http.NewRequestWithContext(context.Background(), http.MethodGet, ts.URL+"/api/dns", nil)
+	if err != nil {
+		t.Fatalf("list new request: %v", err)
+	}
+	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("list request: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
-	body, _ := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
 	var listResp dto.ListDNSResponse
 	if err := json.Unmarshal(body, &listResp); err != nil {
 		t.Fatalf("decode list: %v", err)
@@ -133,17 +167,25 @@ func TestIntegration_InvalidIP(t *testing.T) {
 	ts := newIntegrationServer(t)
 	defer ts.Close()
 
-	resp, err := http.Post(ts.URL+"/api/dns", "application/json", bytes.NewReader([]byte(`{"ip":"not-an-ip"}`)))
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, ts.URL+"/api/dns", bytes.NewReader([]byte(`{"ip":"not-an-ip"}`)))
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Errorf("expected 400 for invalid IP, got %d", resp.StatusCode)
 	}
 
-	body, _ := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
 	var errResp dto.ErrorResponse
 	if err := json.Unmarshal(body, &errResp); err != nil {
 		t.Fatalf("decode error: %v", err)
@@ -157,11 +199,16 @@ func TestIntegration_EmptyBody(t *testing.T) {
 	ts := newIntegrationServer(t)
 	defer ts.Close()
 
-	resp, err := http.Post(ts.URL+"/api/dns", "application/json", bytes.NewReader([]byte{}))
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, ts.URL+"/api/dns", bytes.NewReader([]byte{}))
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Errorf("expected 400 for empty body, got %d", resp.StatusCode)
@@ -172,19 +219,28 @@ func TestIntegration_ListFromInitialData(t *testing.T) {
 	ts := newIntegrationServer(t, "nameserver 8.8.8.8", "nameserver 1.1.1.1")
 	defer ts.Close()
 
-	resp, err := http.Get(ts.URL + "/api/dns")
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, ts.URL+"/api/dns", nil)
+	if err != nil {
+		t.Fatalf("list new request: %v", err)
+	}
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("list request: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("expected 200, got %d", resp.StatusCode)
 	}
 
-	body, _ := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
 	var listResp dto.ListDNSResponse
-	json.Unmarshal(body, &listResp)
+	if err := json.Unmarshal(body, &listResp); err != nil {
+		t.Fatalf("decode list: %v", err)
+	}
 
 	if len(listResp.Servers) != 2 {
 		t.Errorf("expected 2 servers, got %d", len(listResp.Servers))
@@ -194,22 +250,32 @@ func TestIntegration_ListFromInitialData(t *testing.T) {
 func TestIntegration_AddAndVerifyDisk(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "resolv.conf")
-	os.WriteFile(path, []byte("nameserver 8.8.8.8\n"), 0o644)
+	if err := os.WriteFile(path, []byte("nameserver 8.8.8.8\n"), 0o600); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
 
-	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	log := slog.New(slog.DiscardHandler)
 	handler := NewHandler(context.Background(), log, Config{ResolvePath: path})
 	ts := httptest.NewServer(handler)
 	defer ts.Close()
 
 	// Add a server.
-	resp, err := http.Post(ts.URL+"/api/dns", "application/json", bytes.NewReader([]byte(`{"ip":"1.1.1.1"}`)))
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, ts.URL+"/api/dns", bytes.NewReader([]byte(`{"ip":"1.1.1.1"}`)))
+	if err != nil {
+		t.Fatalf("add new request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("add: %v", err)
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 
 	// Verify file on disk has both servers.
-	data, _ := os.ReadFile(path)
+	data, err := os.ReadFile(path) //nolint:gosec // path is in TempDir
+	if err != nil {
+		t.Fatalf("read file: %v", err)
+	}
 	expected := "nameserver 8.8.8.8\nnameserver 1.1.1.1\n"
 	if string(data) != expected {
 		t.Errorf("file content:\ngot:  %q\nwant: %q", string(data), expected)
@@ -219,21 +285,29 @@ func TestIntegration_AddAndVerifyDisk(t *testing.T) {
 func TestIntegration_DeleteAndVerifyDisk(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "resolv.conf")
-	os.WriteFile(path, []byte("nameserver 8.8.8.8\nnameserver 1.1.1.1\n"), 0o644)
+	if err := os.WriteFile(path, []byte("nameserver 8.8.8.8\nnameserver 1.1.1.1\n"), 0o600); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
 
-	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	log := slog.New(slog.DiscardHandler)
 	handler := NewHandler(context.Background(), log, Config{ResolvePath: path})
 	ts := httptest.NewServer(handler)
 	defer ts.Close()
 
-	req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/dns", bytes.NewReader([]byte(`{"ip":"8.8.8.8"}`)))
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodDelete, ts.URL+"/api/dns", bytes.NewReader([]byte(`{"ip":"8.8.8.8"}`)))
+	if err != nil {
+		t.Fatalf("delete new request: %v", err)
+	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("delete: %v", err)
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 
-	data, _ := os.ReadFile(path)
+	data, err := os.ReadFile(path) //nolint:gosec // path is in TempDir
+	if err != nil {
+		t.Fatalf("read file: %v", err)
+	}
 	expected := "nameserver 1.1.1.1\n"
 	if string(data) != expected {
 		t.Errorf("file content:\ngot:  %q\nwant: %q", string(data), expected)

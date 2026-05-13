@@ -1,8 +1,9 @@
+// Package dto provides data transfer objects for the DNS Manager HTTP API.
 package dto
 
 import (
-	`errors`
-	`strings`
+	"errors"
+	"strings"
 )
 
 // NameserverRequest is the request body for add and delete operations.

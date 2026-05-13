@@ -1,3 +1,5 @@
+// Package domain defines the core entities and sentinel errors
+// for DNS server management.
 package domain
 
 import (
@@ -5,6 +7,7 @@ import (
 	"net"
 )
 
+// Sentinel errors for nameserver validation.
 var (
 	ErrInvalidIP        = errors.New("invalid IP")
 	ErrNotGlobalUnicast = errors.New("IP must be a global unicast address")

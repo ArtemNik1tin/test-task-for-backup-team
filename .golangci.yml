@@ -1,0 +1,80 @@
+version: "2"
+linters:
+  default: none
+  enable:
+    # Default strict set
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+
+    # Correctness
+    - bodyclose
+    - canonicalheader
+    - containedctx
+    - contextcheck
+    - copyloopvar
+    - durationcheck
+    - errchkjson
+    - errname
+    - errorlint
+    - exhaustive
+    - fatcontext
+    - forcetypeassert
+    - gocheckcompilerdirectives
+    - gosec
+    - iface
+    - inamedparam
+    - interfacebloat
+    - nilerr
+    - nilnesserr
+    - nilnil
+    - noctx
+    - nolintlint
+    - nosprintfhostport
+    - reassign
+
+    # Performance
+    - makezero
+    - mirror
+    - perfsprint
+    - prealloc
+    - unconvert
+    - wastedassign
+
+    # Style / maintainability
+    - asasalint
+    - bidichk
+    - decorder
+    - dogsled
+    - dupword
+    - goconst
+    - gocritic
+    - godot
+    - goprintffuncname
+    - grouper
+    - importas
+    - intrange
+    - misspell
+    - modernize
+    - musttag
+    - nakedret
+    - nestif
+    - predeclared
+    - recvcheck
+    - revive
+    - sloglint
+    - tagalign
+    - tagliatelle
+    - testifylint
+    - thelper
+    - tparallel
+    - unparam
+    - usestdlibvars
+    - usetesting
+    - whitespace
+
+issues:
+  exclude-dirs:
+    - .github

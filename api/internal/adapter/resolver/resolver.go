@@ -1,3 +1,5 @@
+// Package resolver implements reading and writing DNS server configuration
+// from a resolv.conf-style file.
 package resolver
 
 import (
