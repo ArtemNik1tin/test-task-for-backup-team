@@ -14,12 +14,15 @@ import (
 )
 
 const (
+	// nameserverPrefix is a keyword in the resolv.conf configuration file.
 	nameserverPrefix                            = "nameserver"
+	// FilePermsForNameserverRecording defines the default permissions (rw-r--r--)
+	// for DNS configuration files on Unix systems.
 	FilePermsForNameserverRecording os.FileMode = 0o644
 	NumberOfExpectedCLArguments                 = 2
 )
 
-// Nameserver is a record about a DNS server.
+// Nameserver represents a DNS server record that contains a verified IP address.
 type Nameserver struct {
 	ip net.IP
 }
@@ -35,25 +38,37 @@ func NewNameserver(ip string) (Nameserver, error) {
 	return Nameserver{ip: parsedIP}, nil
 }
 
+// DNSReader provides a method for obtaining a list of DNS servers.
 type DNSReader interface {
+	// List returns the current list of configured DNS servers.
 	List() ([]Nameserver, error)
 }
 
+// DNSWriter provides methods for modifying the list of DNS servers.
 type DNSWriter interface {
+	// Add adds a new DNS server to the configuration.
 	Add(ip Nameserver) error
+	// Delete removes an existing DNS server from the configuration.
 	Delete(ip Nameserver) error
 }
 
+// DNSManager combines read and write interfaces for DNS management.
 type DNSManager interface {
 	DNSReader
 	DNSWriter
 }
 
+// FileDNSManager implements the DNSManager interface using a text file
+// (for example, /etc/resolv.conf) as storage.
 type FileDNSManager struct {
+	// path to the configuration file.
 	path string
+	// mu provides thread safety for concurrent access to a file.
 	mu   sync.Mutex
 }
 
+// List returns a slice of Nameserver objects found in the configuration file.
+// The method is safe to use simultaneously from multiple goroutines.
 func (m *FileDNSManager) List() ([]Nameserver, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -61,6 +76,8 @@ func (m *FileDNSManager) List() ([]Nameserver, error) {
 	return m.list()
 }
 
+// Add adds a DNS server to the end of the file if it does not already exist.
+// Uses a mutex to prevent a race condition during writing.
 func (m *FileDNSManager) Add(ns Nameserver) (err error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -97,7 +114,8 @@ func (m *FileDNSManager) Add(ns Nameserver) (err error) {
 	return writer.Flush()
 }
 
-// Delete removes the specified DNS server from the configuration.
+// Delete removes the server from the configuration file.
+// The operation is performed by overwriting the file to a temporary buffer and then replacing it (atomic rename).
 func (m *FileDNSManager) Delete(targetNS Nameserver) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -122,7 +140,8 @@ func (m *FileDNSManager) Delete(targetNS Nameserver) error {
 	return m.rewriteFile(serversToKeep)
 }
 
-// rewriteFile safely overwrites the configuration file through an atomic rename operation.
+// rewriteFile creates a temporary file, writes new data to it, and atomically replaces
+// the original file. This ensures data integrity in case of failures.
 func (m *FileDNSManager) rewriteFile(servers []Nameserver) (err error) {
 	dir := filepath.Dir(m.path)
 	baseName := filepath.Base(m.path)
@@ -187,6 +206,8 @@ func writeNameservers(writer io.Writer, servers []Nameserver) error {
 	return bufWriter.Flush()
 }
 
+// list is an internal method for reading a file without acquiring a mutex.
+// It is used inside methods that have already acquired a Lock.
 func (m *FileDNSManager) list() (ns []Nameserver, err error) {
 	file, openErr := os.Open(m.path)
 	if openErr != nil {
@@ -205,6 +226,7 @@ func (m *FileDNSManager) list() (ns []Nameserver, err error) {
 	return ns, err
 }
 
+// extractNameservers analyzes the data stream and extracts the IP addresses that follow the 'nameserver' prefix.
 func extractNameservers(reader io.Reader) ([]Nameserver, error) {
 	var ipAddresses []Nameserver
 
@@ -229,6 +251,7 @@ func extractNameservers(reader io.Reader) ([]Nameserver, error) {
 	return ipAddresses, nil
 }
 
+// isNameserverExist checks whether a specific IP is present in the current list of servers.
 func (m *FileDNSManager) isNameserverExist(ns Nameserver) (bool, error) {
 	current, err := m.list()
 	if err != nil {
@@ -242,13 +265,6 @@ func (m *FileDNSManager) isNameserverExist(ns Nameserver) (bool, error) {
 	}
 
 	return false, nil
-}
-
-const serverURL = "http://localhost:8080/api/v1/dns"
-
-// dnsRequest describes the JSON structure for sending to the server.
-type dnsRequest struct {
-	IP string `json:"ip"`
 }
 
 func main() {
